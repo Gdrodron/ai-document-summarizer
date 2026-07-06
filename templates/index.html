@@ -6,33 +6,109 @@
     <title>AI Document Summarizer</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body class="bg-light">
+<body>
 
-<div class="container mt-5">
+<div class="container py-5">
 
-    <h1 class="text-center mb-4">
-        🤖 AI Document Summarizer
-    </h1>
+    <div class="text-center mb-5">
 
-    <div class="card shadow">
+        <h1 class="display-4 fw-bold">
+            🤖 AI Document Summarizer
+        </h1>
 
-        <div class="card-body">
+        <p class="lead text-muted">
+            Upload PDF, DOCX, or TXT files and let AI generate summaries,
+            key points, action items, and keywords.
+        </p>
 
-            <div class="mb-3">
-                <label for="documentInput" class="form-label">Choose document to summarize</label>
+    </div>
+
+    <div class="card shadow-lg border-0">
+
+        <div class="card-body p-5">
+
+            <form>
+
+                <label for="document" class="form-label visually-hidden">Upload document</label>
                 <input
-                    id="documentInput"
-                    class="form-control"
+                    id="document"
+                    name="document"
                     type="file"
-                    title="Choose a document file to upload"
-                    aria-label="Document file input">
+                    class="form-control form-control-lg mb-4"
+                    aria-describedby="documentHelp">
+                <div id="documentHelp" class="form-text mb-3">Choose a PDF, DOCX, or TXT file.</div>
+
+                <button
+                    type="submit"
+                    class="btn btn-primary btn-lg w-100">
+
+                    Summarize Document
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <div class="row mt-5">
+
+        <div class="col-md-3">
+
+            <div class="feature-card">
+
+                📄
+
+                <h5>PDF</h5>
+
+                <p>Upload PDF documents.</p>
+
             </div>
 
-            <button
-                class="btn btn-primary w-100">
-                Summarize
-            </button>
+        </div>
+
+        <div class="col-md-3">
+
+            <div class="feature-card">
+
+                📝
+
+                <h5>DOCX</h5>
+
+                <p>Word document support.</p>
+
+            </div>
+
+        </div>
+
+        <div class="col-md-3">
+
+            <div class="feature-card">
+
+                📋
+
+                <h5>TXT</h5>
+
+                <p>Plain text files.</p>
+
+            </div>
+
+        </div>
+
+        <div class="col-md-3">
+
+            <div class="feature-card">
+
+                🤖
+
+                <h5>AI Summary</h5>
+
+                <p>Powered by OpenAI.</p>
+
+            </div>
 
         </div>
 
