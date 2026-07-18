@@ -1,181 +1,245 @@
-document.addEventListener("DOMContentLoaded", () => {
+/* =========================
+   APP.JS - Global Scripts
+========================= */
 
-    // ==========================
-    // Drag & Drop Upload
-    // ==========================
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
 
-    const dropArea = document.getElementById("dropArea");
-    const fileInput = document.getElementById("document");
-    const browseBtn = document.getElementById("browseBtn");
-    const fileName = document.getElementById("fileName");
+    // =========================
+    // AUTO HIDE ALERTS
+    // =========================
 
-    if (dropArea && fileInput && browseBtn && fileName) {
+    document
+    .querySelectorAll(".alert")
+    .forEach(function(alert) {
+        setTimeout(function() {
+            alert.style.transition =
+                "opacity .5s";
+            alert.style.opacity = "0";
+            setTimeout(function(){
+                alert.remove();
+            },500);
+        },4000);
+    });
 
-        browseBtn.addEventListener("click", () => {
-            fileInput.click();
-        });
+    // =========================
+    // DELETE CONFIRMATION
+    // =========================
+    // NOTE: history.html already handles this via an inline
+    // onsubmit="return confirm(...)" on the delete <form>, so this
+    // selector currently matches nothing (no .btn-delete class in the
+    // markup). Left here in case a future template uses that class,
+    // but it's inert right now -- not a bug, just unused.
 
-        dropArea.addEventListener("click", () => {
-            fileInput.click();
-        });
+    document
+    .querySelectorAll(".btn-delete")
+    .forEach(function(button){
+        button.addEventListener(
+            "click",
+            function(event){
 
-        fileInput.addEventListener("change", () => {
+                if(
+                    !confirm(
+                        "Are you sure you want to delete this analysis?"
+                    )
+                ){
+                    event.preventDefault();
+                }
+            }
+        );
+    });
 
-            if (fileInput.files.length > 0) {
+    // =========================
+    // FILE DRAG & DROP
+    // =========================
 
-                fileName.textContent =
-                    "Selected: " + fileInput.files[0].name;
+    const dropArea =
+        document.getElementById(
+            "dropArea"
+        );
+    const fileInput =
+        document.getElementById(
+            "document"
+        );
+    const browseBtn =
+        document.getElementById(
+            "browseBtn"
+        );
+    const fileName =
+        document.getElementById(
+            "fileName"
+        );
+    if(
+        dropArea &&
+        fileInput
+    ){
+        browseBtn.addEventListener(
+            "click",
+            function(){
+                fileInput.click();
+            }
+        );
+        fileInput.addEventListener(
+            "change",
+            function(){
+                showFile(
+                    this.files[0]
+                );
+            }
+        );
+        dropArea.addEventListener(
+            "dragover",
+            function(e){
+                e.preventDefault();
+                dropArea.classList.add(
+                    "drag-active"
+                );
 
             }
+        );
 
-        });
-
-        ["dragenter", "dragover"].forEach(event => {
-
-            dropArea.addEventListener(event, (e) => {
-
-                e.preventDefault();
-
-                dropArea.classList.add("drag-over");
-
-            });
-
-        });
-
-        ["dragleave", "drop"].forEach(event => {
-
-            dropArea.addEventListener(event, (e) => {
-
-                e.preventDefault();
-
-                dropArea.classList.remove("drag-over");
-
-            });
-
-        });
-
-        dropArea.addEventListener("drop", (e) => {
-
-            e.preventDefault();
-
-            fileInput.files = e.dataTransfer.files;
-
-            if (fileInput.files.length > 0) {
-
-                fileName.textContent =
-                    "Selected: " + fileInput.files[0].name;
-
+        dropArea.addEventListener(
+            "dragleave",
+            function(){
+                dropArea.classList.remove(
+                    "drag-active"
+                );
             }
+        );
 
-        });
+        dropArea.addEventListener(
+            "drop",
+            function(e){
+                e.preventDefault();
+                dropArea.classList.remove(
+                    "drag-active"
+                );
 
+                const files =
+                    e.dataTransfer.files;
+                if(files.length){
+                    fileInput.files =
+                        files;
+                    showFile(
+                        files[0]
+                    );
+                }
+            }
+        );
     }
 
-    // ==========================
-    // Loading Screen
-    // ==========================
-
-    const uploadForm = document.getElementById("uploadForm");
-    const loadingOverlay = document.getElementById("loadingOverlay");
-
-    if (uploadForm && loadingOverlay) {
-
-        uploadForm.addEventListener("submit", () => {
-
-            loadingOverlay.classList.remove("d-none");
-
-        });
-
+    function showFile(file){
+        if(!file){
+            return;
+        }
+        const allowed = [
+            "pdf",
+            "docx",
+            "txt"
+        ];
+        const extension =
+            file.name
+            .split(".")
+            .pop()
+            .toLowerCase();
+        if(
+            !allowed.includes(extension)
+        ){
+            fileName.innerHTML =
+                "❌ Unsupported file type";
+            return;
+        }
+        fileName.innerHTML =
+            "📄 " + file.name;
     }
 
-    // ==========================
-    // Copy Summary
-    // ==========================
+    // =========================
+    // LOADING OVERLAY
+    // =========================
 
-    const copyButton = document.getElementById("copySummary");
-    const summaryText = document.getElementById("summaryText");
+    const uploadForm =
+        document.getElementById(
+            "uploadForm"
+        );
+    const loadingOverlay =
+        document.getElementById(
+            "loadingOverlay"
+        );
 
-    if (copyButton && summaryText) {
+    if(uploadForm){
+        uploadForm.addEventListener(
+            "submit",
+            function(){
+                if(loadingOverlay){
+                    loadingOverlay.classList.remove(
+                        "d-none"
+                    );
+                }
 
-        copyButton.addEventListener("click", async () => {
+                const button =
+                    uploadForm.querySelector(
+                        "button[type='submit']"
+                    );
+                if(button){
+                    button.disabled = true;
+                    button.innerHTML =
+                    `
+                    <span 
+                    class="spinner-border spinner-border-sm">
+                    </span>
+                    Analyzing...
+                    `;
+                }
+            }
+        );
+    }
 
-            try {
+    // =========================
+    // DARK MODE TOGGLE
+    // =========================
+    // REMOVED: this used to attach a SECOND click handler to
+    // #themeToggle that toggled a body.dark-mode class and wrote
+    // 'dark-mode' / '' into localStorage['theme']. base.html already
+    // owns theming via the data-bs-theme="light"/"dark" attribute and
+    // the SAME localStorage['theme'] key, but with 'light'/'dark'
+    // values. Having both meant every click fired two conflicting
+    // handlers that stomped on each other's localStorage value, and
+    // on reload data-bs-theme could end up set to the literal string
+    // "dark-mode", which Bootstrap doesn't recognize -- breaking the
+    // theme and desyncing the moon/sun icon. base.html's own inline
+    // script at the bottom of that file is the single source of truth
+    // for theming now.
 
-                await navigator.clipboard.writeText(summaryText.innerText);
+    // =========================
+    // SMOOTH SCROLL
+    // =========================
 
-                copyButton.innerHTML =
-                    '<i class="bi bi-check-lg"></i> Copied';
+    document
+    .querySelectorAll(
+        "a[href^='#']"
+    )
+    .forEach(function(link){
 
-                const toastElement =
-                    document.getElementById("copyToast");
+        link.addEventListener(
+            "click",
+            function(e){
 
-                if (toastElement) {
-
-                    const toast =
-                        new bootstrap.Toast(toastElement);
-
-                    toast.show();
+                const target =
+                    document.querySelector(
+                        this.getAttribute("href")
+                    );
+                if(target){
+                    e.preventDefault();
+                    target.scrollIntoView({
+                        behavior:"smooth"
+                    });
 
                 }
 
-                setTimeout(() => {
-
-                    copyButton.innerHTML =
-                        '<i class="bi bi-clipboard"></i> Copy';
-
-                }, 2000);
-
             }
-
-            catch (error) {
-
-                console.error(error);
-
-            }
-
-        });
-
-    }
-
-});
-
-// ==========================
-// Dark Mode
-// ==========================
-
-const themeToggle = document.getElementById("themeToggle");
-
-if (themeToggle) {
-
-    if (localStorage.getItem("theme") === "dark") {
-
-        document.body.classList.add("dark-mode");
-
-        themeToggle.innerHTML =
-            '<i class="bi bi-sun-fill"></i>';
-
-    }
-
-    themeToggle.addEventListener("click", () => {
-
-        document.body.classList.toggle("dark-mode");
-
-        if (document.body.classList.contains("dark-mode")) {
-
-            localStorage.setItem("theme", "dark");
-
-            themeToggle.innerHTML =
-                '<i class="bi bi-sun-fill"></i>';
-
-        } else {
-
-            localStorage.setItem("theme", "light");
-
-            themeToggle.innerHTML =
-                '<i class="bi bi-moon-stars-fill"></i>';
-
-        }
+        );
 
     });
 
-}
+});

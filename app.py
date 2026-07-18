@@ -1,244 +1,105 @@
 import os
+import logging
 
-from flask import (
-    Flask,
-    Response,
-    redirect,
-    render_template,
-    request,
-    send_file,
-)
-from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
 
-from utils.ai import summarize_document
-from utils.database import (
-    delete_analysis,
-    get_all_analysis,
-    get_analysis,
-    initialize_database,
-    save_analysis,
-)
-from utils.docx_reader import extract_docx
-from utils.parser import parse_ai_response
-from utils.pdf_reader import extract_pdf
-from utils.pdf_report import generate_pdf_report
-from utils.txt_reader import extract_txt
+# Load variables from .env into the environment BEFORE anything else
+# reads os.environ (Config, API keys, DEBUG flag, etc.). Without this,
+# your .env file is silently ignored.
+load_dotenv()
+
+from flask import Flask
+
+from config import Config
+
+from routes.main import main_bp
+from routes.errors import errors_bp
+
+from utils.database import initialize_database
 
 
-app = Flask(__name__)
+# =========================
+# LOGGING
+# =========================
 
-UPLOAD_FOLDER = "uploads"
-ALLOWED_EXTENSIONS = {"pdf", "docx", "txt"}
+logging.basicConfig(level=logging.INFO)
 
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Create the SQLite database
-initialize_database()
+logger = logging.getLogger(__name__)
 
 
-def allowed_file(filename):
-    """Check if the uploaded file has an allowed extension."""
-    return (
-        "." in filename
-        and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-    )
+# =========================
+# APPLICATION FACTORY
+# =========================
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+def create_app():
 
+    app = Flask(__name__)
 
-# ----------------------#
-#     FILE UPLOAD       #
-# ----------------------#
+    # -------------------------
+    # Configuration
+    # -------------------------
 
-@app.route("/upload", methods=["POST"])
-def upload():
+    app.config.from_object(Config)
 
-    if "document" not in request.files:
-        return "No file selected.", 400
+    # -------------------------
+    # Upload folder
+    # -------------------------
 
-    file = request.files["document"]
+    upload_folder = app.config.get("UPLOAD_FOLDER", "uploads")
+    os.makedirs(upload_folder, exist_ok=True)
 
-    if file.filename == "":
-        return "No file selected.", 400
-
-    if not allowed_file(file.filename):
-        return (
-            "Invalid file type. Please upload a PDF, DOCX, or TXT file.",
-            400,
-        )
-
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(
-        app.config["UPLOAD_FOLDER"],
-        filename,
-    )
-
-    file.save(filepath)
-
-    extension = filename.rsplit(".", 1)[1].lower()
+    # -------------------------
+    # Database
+    # -------------------------
+    # Fail fast: if the database can't initialize, the app can't
+    # actually do anything (every route depends on it), so don't
+    # let it start in a broken state.
 
     try:
+        initialize_database()
+        app.logger.info("Database initialized successfully.")
 
-        if extension == "pdf":
-            extracted_text = extract_pdf(filepath)
+    except Exception as error:
+        app.logger.critical(f"Database initialization failed: {error}")
+        raise
 
-        elif extension == "docx":
-            extracted_text = extract_docx(filepath)
+    # -------------------------
+    # Blueprints
+    # -------------------------
 
-        elif extension == "txt":
-            extracted_text = extract_txt(filepath)
+    app.register_blueprint(main_bp)
+    app.register_blueprint(errors_bp)
 
-        else:
-            return "Unsupported file type.", 400
-
-        # Generate AI Analysis
-        ai_response = summarize_document(extracted_text)
-
-        # Parse AI Response
-        parsed = parse_ai_response(ai_response)
-
-        # ----------------------
-        # Document Statistics
-        # ----------------------
-
-        word_count = len(extracted_text.split())
-        character_count = len(extracted_text)
-        reading_time = max(1, round(word_count / 200))
-
-        # ----------------------
-        # Keywords
-        # ----------------------
-
-        keyword_list = [
-            keyword.strip()
-            for keyword in parsed["keywords"].split(",")
-            if keyword.strip()
-        ]
-
-        # ----------------------
-        # Save Analysis
-        # ----------------------
-
-        save_analysis(
-            filename=filename,
-            summary=parsed["summary"],
-            key_points=parsed["key_points"],
-            action_items=parsed["action_items"],
-            keywords=", ".join(keyword_list),
-            word_count=word_count,
-            character_count=character_count,
-            reading_time=reading_time,
-        )
-
-    except Exception as e:
-        return f"Error processing document: {str(e)}", 500
-
-    return render_template(
-        "result.html",
-        filename=filename,
-        extracted_text=extracted_text,
-        summary=parsed["summary"],
-        key_points=parsed["key_points"],
-        action_items=parsed["action_items"],
-        keywords=keyword_list,
-        word_count=word_count,
-        character_count=character_count,
-        reading_time=reading_time,
-    )
-
-# ----------------------#
-#     HISTORY PAGE      #
-# ----------------------#
-
-@app.route("/history")
-def history():
-    """Display all saved document analyses."""
-
-    analyses = get_all_analysis()
-
-    return render_template(
-        "history.html",
-        analyses=analyses,
-    )
+    return app
 
 
-# ----------------------#
-#   DELETE ANALYSIS     #
-# ----------------------#
+# =========================
+# GUNICORN ENTRY POINT
+# =========================
 
-@app.route("/delete/<int:record_id>")
-def delete(record_id):
-    """Delete an analysis record."""
-
-    delete_analysis(record_id)
-
-    return redirect("/history")
+app = create_app()
 
 
-@app.route("/view/<int:record_id>")
-def view(record_id):
-    """Display a saved analysis."""
-
-    analysis = get_analysis(record_id)
-
-    if analysis is None:
-        return "Analysis not found.", 404
-
-    return render_template(
-        "view.html",
-        analysis=analysis,
-    )
-
-# ----------------------#
-#   DOWNLOAD SUMMARY    #
-# ----------------------#
-
-@app.route("/download-summary", methods=["POST"])
-def download_summary():
-
-    summary = request.form.get("summary", "")
-
-    return Response(
-        summary,
-        mimetype="text/plain",
-        headers={
-            "Content-Disposition":
-                "attachment; filename=ai_summary.txt"
-        },
-    )
-
-
-# ----------------------#
-#    DOWNLOAD PDF       #
-# ----------------------#
-
-@app.route("/download-pdf", methods=["POST"])
-def download_pdf():
-
-    filename = request.form.get("filename", "document")
-    summary = request.form.get("summary", "")
-
-    pdf_path = os.path.join(
-        app.config["UPLOAD_FOLDER"],
-        "AI_Report.pdf",
-    )
-
-    generate_pdf_report(
-        pdf_path,
-        filename,
-        summary,
-    )
-
-    return send_file(
-        pdf_path,
-        as_attachment=True,
-        download_name="AI_Report.pdf",
-    )
-
+# =========================
+# LOCAL DEVELOPMENT
+# =========================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+    debug_mode = os.environ.get("DEBUG", "False").lower() == "true"
+
+    if debug_mode:
+        # Werkzeug's debugger allows arbitrary code execution. Binding
+        # to 0.0.0.0 with debug on is safe only on a trusted local
+        # network (e.g. Docker on your own machine) - never do this
+        # on a publicly reachable host.
+        logger.warning(
+            "Running with debug=True and host=0.0.0.0. "
+            "Do not expose this port to the public internet."
+        )
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=debug_mode,
+    )
